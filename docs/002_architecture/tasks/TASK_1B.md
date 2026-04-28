@@ -972,16 +972,19 @@ curl -s http://localhost:8000/health
 
 ## Handoff
 
-_Fill in after completing this task:_
-
 ### Decisions Made
-<!-- E.g., "AuthorRepository.list() returns dict because it includes aggregate counts" -->
+- All five repository classes follow spec exactly. `WorkRepository._to_work()` returns domain `Work` (not `WorkResponse`). `AuthorRepository.list()` and `get_with_stats()` return raw `dict` for service-side assembly.
+- `repositories/__init__.py` is empty — no barrel exports, import from specific modules.
+- Cypher queries copied verbatim from services; no rewrites.
 
 ### Harder Than Expected
-<!-- E.g., "The stream detail assembly required 4 separate query methods to match the service behavior" -->
+- Nothing unexpected. The spec code was directly transcribable.
 
 ### Watch Out (for Task 1C)
-<!-- E.g., "WorkRepository._to_work() doesn't include stream_ids — the service needs to handle that" -->
+- `WorkRepository.get()` fetches `stream_ids` in the Cypher but `_to_work()` ignores them — the domain `Work` model has no `stream_ids` field. Task 1C's service layer needs to read `stream_ids` directly from the Neo4j record when building `WorkResponse`.
+- `WorkRepository.create()` calls `self.get(work_id)` at the end which does a second round-trip but doesn't return `stream_ids` either. The service can call `get_work` on the driver directly (current code) or accept this as a known limitation for new works (stream_ids will be `[]` on create).
+- `CollectionRepository.update()` passes `updates` as a kwarg to `_run_single()`, but `_run_single` passes params as `**params` which becomes a nested dict under key `updates`. This is consistent with how the base class works — Neo4j receives `$updates` as the dict.
+- `StreamRepository.delete()` returns `count(s)` after deleting — Neo4j `count()` on a deleted node returns 0, so `deleted > 0` will always be `False`. The correct pattern is to check existence first or use `RETURN 1`. Task 1C should fix this if delete confirmation matters.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+- None. All files exist, all classes extend `NeoRepository`, no API model imports, services untouched.

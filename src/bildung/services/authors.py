@@ -3,102 +3,38 @@ from __future__ import annotations
 
 import logging
 
-from neo4j import AsyncDriver
-
-logger = logging.getLogger(__name__)
-
 from bildung.models.api import (
     AuthorResponse,
+    AuthorSummary as ApiAuthorSummary,
     CollectionDetailResponse,
     CollectionSummary,
     WorkResponse,
 )
-from bildung.services.works import _record_to_work
+from bildung.repositories.authors import AuthorRepository
+from bildung.repositories.works import WorkRepository
+
+logger = logging.getLogger(__name__)
 
 
-async def list_authors(
-    driver: AsyncDriver,
-    limit: int = 50,
-    offset: int = 0,
-) -> list[AuthorResponse]:
-    """All authors with work counts and completion stats derived from collections."""
-    async with driver.session() as session:
-        result = await session.run(
-            """
-            MATCH (a:Author)
-            OPTIONAL MATCH (a)-[:WROTE]->(w:Work)
-            WITH a,
-                 count(w)                                           AS total_works,
-                 sum(CASE WHEN w.status = 'read' THEN 1 ELSE 0 END) AS read_works
-            OPTIONAL MATCH (c:Collection {author_id: a.id, type: 'major_works'})
-            OPTIONAL MATCH (w2:Work)-[:IN_COLLECTION]->(c)
-            WITH a, total_works, read_works,
-                 count(w2) AS major_total,
-                 sum(CASE WHEN w2.status = 'read' THEN 1 ELSE 0 END) AS major_read
-            RETURN a {.*} AS author, total_works, read_works, major_total, major_read
-            ORDER BY a.name
-            SKIP $offset LIMIT $limit
-            """,
-            offset=offset,
-            limit=limit,
-        )
-        out: list[AuthorResponse] = []
-        async for r in result:
-            out.append(_build_author_summary(r))
-        return out
+class AuthorService:
+    def __init__(self, author_repo: AuthorRepository) -> None:
+        self._authors = author_repo
 
+    async def list(self, limit: int = 50, offset: int = 0) -> list[AuthorResponse]:
+        rows = await self._authors.list(limit=limit, offset=offset)
+        return [self._row_to_summary(r) for r in rows]
 
-async def get_author(driver: AsyncDriver, author_id: str) -> AuthorResponse | None:
-    """Single author with all collections (each containing their works) + uncollected works."""
-    async with driver.session() as session:
-        # Stats
-        stats_res = await session.run(
-            """
-            MATCH (a:Author {id: $id})
-            OPTIONAL MATCH (a)-[:WROTE]->(w:Work)
-            WITH a,
-                 count(w)                                           AS total_works,
-                 sum(CASE WHEN w.status = 'read' THEN 1 ELSE 0 END) AS read_works
-            OPTIONAL MATCH (c:Collection {author_id: $id, type: 'major_works'})
-            OPTIONAL MATCH (w2:Work)-[:IN_COLLECTION]->(c)
-            WITH a, total_works, read_works,
-                 count(w2) AS major_total,
-                 sum(CASE WHEN w2.status = 'read' THEN 1 ELSE 0 END) AS major_read
-            RETURN a {.*} AS author, total_works, read_works, major_total, major_read
-            """,
-            id=author_id,
-        )
-        stats = await stats_res.single()
+    async def get(self, author_id: str) -> AuthorResponse | None:
+        stats = await self._authors.get_with_stats(author_id)
         if not stats:
             return None
 
         a = stats["author"]
         author_summary = [{"id": a.get("id", ""), "name": a.get("name", "")}]
 
-        # All collections owned by this author
-        cols_res = await session.run(
-            """
-            MATCH (c:Collection {author_id: $id})
-            OPTIONAL MATCH (w:Work)-[r:IN_COLLECTION]->(c)
-            WITH c, coalesce(r.order, 9999) AS sort_ord, r.order AS ord, w
-            ORDER BY c.type ASC, c.name ASC, sort_ord ASC, w.title ASC
-            WITH c, collect({w: w, ord: ord}) AS work_entries
-            RETURN c {.*} AS col, work_entries
-            ORDER BY
-              CASE c.type
-                WHEN 'major_works' THEN 0
-                WHEN 'minor_works' THEN 1
-                WHEN 'series' THEN 2
-                ELSE 3
-              END ASC, c.name ASC
-            """,
-            id=author_id,
-        )
-
+        col_rows = await self._authors.get_author_collections(author_id)
         collections: list[CollectionDetailResponse] = []
-        all_collected_work_ids: set[str] = set()
-
-        async for cr in cols_res:
+        for cr in col_rows:
             c = cr["col"]
             entries = cr["work_entries"]
             works: list[WorkResponse] = []
@@ -107,18 +43,15 @@ async def get_author(driver: AsyncDriver, author_id: str) -> AuthorResponse | No
                 wm = entry.get("w")
                 if not wm:
                     continue
-                wid = wm.get("id", "")
-                all_collected_work_ids.add(wid)
                 col_summary = [{
                     "id": c.get("id", ""),
                     "name": c.get("name", ""),
                     "type": c.get("type", ""),
                     "order": entry.get("ord"),
                 }]
-                works.append(_record_to_work(wm, author_summary, [], col_summary))
+                works.append(_raw_to_work_response(wm, author_summary, [], col_summary))
                 if wm.get("status") == "read":
                     read_count += 1
-
             collections.append(CollectionDetailResponse(
                 id=c.get("id", ""),
                 name=c.get("name", ""),
@@ -130,59 +63,77 @@ async def get_author(driver: AsyncDriver, author_id: str) -> AuthorResponse | No
                 works=works,
             ))
 
-        # Uncollected works — in library but not in any of this author's collections
-        uncollected_res = await session.run(
-            """
-            MATCH (a:Author {id: $id})-[:WROTE]->(w:Work)
-            WHERE NOT (w)-[:IN_COLLECTION]->(:Collection {author_id: $id})
-            WITH w, w.title AS sort_title
-            OPTIONAL MATCH (w)-[:BELONGS_TO]->(st:Stream)
-            OPTIONAL MATCH (w)-[r:IN_COLLECTION]->(oc:Collection)
-            WITH w, sort_title,
-                 collect(DISTINCT st.id) AS stream_ids,
-                 collect(DISTINCT {id: oc.id, name: oc.name, type: oc.type, order: r.order}) AS cols
-            RETURN w {.*} AS work, stream_ids, cols
-            ORDER BY sort_title
-            """,
-            id=author_id,
+        uncollected_rows = await self._authors.get_uncollected_works(author_id)
+        uncollected = [
+            _raw_to_work_response(wr["work"], author_summary, wr["stream_ids"], wr["cols"])
+            for wr in uncollected_rows
+        ]
+
+        return _build_author_response(stats, collections, uncollected)
+
+    @staticmethod
+    def _row_to_summary(r: dict) -> AuthorResponse:
+        a = r["author"]
+        total = r["total_works"] or 0
+        read = r["read_works"] or 0
+        major_total = r["major_total"] or 0
+        major_read = r["major_read"] or 0
+
+        if major_total > 0:
+            pct = round(major_read / major_total, 4)
+        elif total > 0:
+            pct = round(read / total, 4)
+        else:
+            pct = 0.0
+
+        return AuthorResponse(
+            id=a.get("id", ""),
+            name=a.get("name", ""),
+            birth_year=a.get("birth_year"),
+            death_year=a.get("death_year"),
+            nationality=a.get("nationality"),
+            primary_language=a.get("primary_language"),
+            total_works=total,
+            read_works=read,
+            completion_pct=pct,
+            collections=[],
+            works=[],
         )
-        uncollected: list[WorkResponse] = []
-        async for wr in uncollected_res:
-            uncollected.append(_record_to_work(wr["work"], author_summary, wr["stream_ids"], wr["cols"]))
-
-        return _build_author_detail(stats, collections, uncollected)
 
 
-def _build_author_summary(r: dict) -> AuthorResponse:
-    a = r["author"]
-    total = r["total_works"] or 0
-    read = r["read_works"] or 0
-    major_total = r["major_total"] or 0
-    major_read = r["major_read"] or 0
-
-    if major_total > 0:
-        pct = round(major_read / major_total, 4)
-    elif total > 0:
-        pct = round(read / total, 4)
-    else:
-        pct = 0.0
-
-    return AuthorResponse(
-        id=a.get("id", ""),
-        name=a.get("name", ""),
-        birth_year=a.get("birth_year"),
-        death_year=a.get("death_year"),
-        nationality=a.get("nationality"),
-        primary_language=a.get("primary_language"),
-        total_works=total,
-        read_works=read,
-        completion_pct=pct,
-        collections=[],
-        works=[],
+def _raw_to_work_response(
+    work_map: dict,
+    authors_list: list[dict],
+    stream_ids: list | None,
+    collections_list: list | None = None,
+) -> WorkResponse:
+    domain = WorkRepository._to_work(work_map, authors_list, collections_list)
+    return WorkResponse(
+        id=domain.id,
+        title=domain.title,
+        status=domain.status,
+        language_read_in=domain.language_read_in,
+        date_read=domain.date_read,
+        density_rating=domain.density_rating,
+        source_type=domain.source_type,
+        personal_note=domain.personal_note,
+        edition_note=domain.edition_note,
+        significance=domain.significance,
+        authors=[ApiAuthorSummary(id=a.id, name=a.name) for a in domain.authors],
+        stream_ids=stream_ids or [],
+        collections=[
+            CollectionSummary(
+                id=c.collection_id,
+                name=c.collection_name,
+                type=c.collection_type,
+                order=c.order,
+            )
+            for c in domain.collections
+        ],
     )
 
 
-def _build_author_detail(
+def _build_author_response(
     stats: dict,
     collections: list[CollectionDetailResponse],
     uncollected: list[WorkResponse],

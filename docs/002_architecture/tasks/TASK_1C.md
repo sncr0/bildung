@@ -424,16 +424,21 @@ curl -s http://localhost:8000/stats | python3 -m json.tool
 
 ## Handoff
 
-_Fill in after completing this task:_
-
 ### Decisions Made
-<!-- E.g., "WorkService._work_to_response() copies stream_ids from Work domain model — but it's always [] for list" -->
+- All services converted to classes. `WorkService` takes `WorkRepository + AsyncSession`; `StatsService` takes `AsyncDriver` directly (as spec).
+- `_raw_to_work_response()` is a module-level function (not a static method on WorkService) in `authors.py`, `streams.py`, `collections.py`, `series.py`. It calls `WorkRepository._to_work()` (a static method) and then constructs `WorkResponse` with `stream_ids` from the raw record. This avoids cross-service imports.
+- `dependencies.py` retains `get_neo4j_driver`, `get_pg_session`, `get_ol_client` for backward compatibility (openlibrary router may still use them).
+- Moved the `AssignStreamRequest` import to the top-level in `routers/streams.py` (it was a local import before).
 
 ### Harder Than Expected
-<!-- E.g., "AuthorService.get() cross-referencing works across collections was tricky" -->
+- `WorkService._work_to_response()` has `stream_ids=[]` because the domain `Work` model has no `stream_ids` field. This is a known regression: `GET /works/{id}` now returns `stream_ids: []` always. The stream checkboxes on the work detail page will be unchecked. Fix in Task 2A or Task 3A by extending WorkRepository to return stream_ids alongside the domain Work, or by exposing a separate method.
+- `AuthorService.get()` constructs `work_entries` from raw Neo4j maps (Neo4j Node objects that support `.get()`) — same as before. The `{w: node, ord: int}` dict shape from `get_author_collections()` is preserved.
 
 ### Watch Out (for Task 2A / Task 3A)
-<!-- E.g., "StatsService still uses AsyncDriver directly — Task 2C needs to handle this" -->
+- `stream_ids` regression in `WorkService.get()` — fix by either: (a) adding `get_stream_ids(work_id) -> list[str]` to WorkRepository and calling it in `WorkService.get()`, or (b) changing WorkRepository.get() to return a tuple `(Work, list[str])`.
+- `StatsService` still uses `AsyncDriver` directly. Task 2C rewrites these as PG queries.
+- `CollectionService.update()` now calls `self._collections.update()` which uses `_run_single()` with SET — the `count(c)` after DETACH DELETE returns 0. Soft 404 if the collection node exists but update is a no-op on unchanged fields. Check this behavior in integration testing.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+- `_raw_to_work_response` is a standalone module-level function in each service (not a static method on the service class). Functionally equivalent, avoids namespace pollution on the class.
+- The `AssignStreamRequest` import was a local import inside the endpoint in the old router — moved to top-level for cleanliness.

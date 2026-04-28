@@ -3,103 +3,69 @@ from __future__ import annotations
 
 import logging
 
-from neo4j import AsyncDriver
-
-from bildung.ids import collection_id
+from bildung.ids import collection_id as _collection_id
 from bildung.models.api import (
+    AuthorSummary as ApiAuthorSummary,
     CollectionDetailResponse,
     CollectionMembershipRequest,
     CollectionResponse,
     CollectionStreamRequest,
+    CollectionSummary,
     CreateCollectionRequest,
     UpdateCollectionRequest,
+    WorkResponse,
 )
-from bildung.services.works import _record_to_work
+from bildung.repositories.collections import CollectionRepository
+from bildung.repositories.works import WorkRepository
 
 logger = logging.getLogger(__name__)
 
 
-def _build_response(c: dict, work_count: int = 0, read_count: int = 0) -> CollectionResponse:
-    return CollectionResponse(
-        id=c.get("id", ""),
-        name=c.get("name", ""),
-        description=c.get("description"),
-        type=c.get("type", "anthology"),
-        author_id=c.get("author_id"),
-        work_count=work_count,
-        read_count=read_count,
-    )
+class CollectionService:
+    def __init__(self, collection_repo: CollectionRepository) -> None:
+        self._collections = collection_repo
 
-
-# ---------------------------------------------------------------------------
-# Collection CRUD
-# ---------------------------------------------------------------------------
-
-async def list_collections(
-    driver: AsyncDriver,
-    author_id: str | None = None,
-    type_: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-) -> list[CollectionResponse]:
-    """All collections, optionally filtered by author or type."""
-    async with driver.session() as session:
-        result = await session.run(
-            """
-            MATCH (c:Collection)
-            WHERE ($author_id IS NULL OR c.author_id = $author_id)
-              AND ($type IS NULL OR c.type = $type)
-            OPTIONAL MATCH (w:Work)-[:IN_COLLECTION]->(c)
-            WITH c,
-                 count(w) AS work_count,
-                 sum(CASE WHEN w.status = 'read' THEN 1 ELSE 0 END) AS read_count
-            RETURN c {.*} AS col, work_count, read_count
-            ORDER BY c.type ASC, c.name ASC
-            SKIP $offset LIMIT $limit
-            """,
-            author_id=author_id,
-            type=type_,
-            offset=offset,
-            limit=limit,
+    async def list(
+        self,
+        author_id: str | None = None,
+        type_: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[CollectionResponse]:
+        rows = await self._collections.list(
+            author_id=author_id, type_=type_, limit=limit, offset=offset
         )
         return [
-            _build_response(r["col"], r["work_count"], r["read_count"])
-            async for r in result
+            CollectionResponse(
+                id=r["col"].get("id", ""),
+                name=r["col"].get("name", ""),
+                description=r["col"].get("description"),
+                type=r["col"].get("type", "anthology"),
+                author_id=r["col"].get("author_id"),
+                work_count=r["work_count"] or 0,
+                read_count=r["read_count"] or 0,
+            )
+            for r in rows
         ]
 
-
-async def get_collection(
-    driver: AsyncDriver, coll_id: str
-) -> CollectionDetailResponse | None:
-    async with driver.session() as session:
-        c_res = await session.run(
-            "MATCH (c:Collection {id: $id}) RETURN c {.*} AS col",
-            id=coll_id,
-        )
-        c_record = await c_res.single()
-        if not c_record:
+    async def get(self, coll_id: str) -> CollectionDetailResponse | None:
+        data = await self._collections.get_with_works(coll_id)
+        if not data:
             return None
-        c = c_record["col"]
 
-        w_res = await session.run(
-            """
-            MATCH (w:Work)-[r:IN_COLLECTION]->(c:Collection {id: $id})
-            WITH w, coalesce(r.order, 9999) AS sort_order, r.order AS ord
-            OPTIONAL MATCH (a:Author)-[:WROTE]->(w)
-            OPTIONAL MATCH (w)-[:BELONGS_TO]->(st:Stream)
-            WITH w, sort_order, ord,
-                 collect(DISTINCT {id: a.id, name: a.name}) AS authors,
-                 collect(DISTINCT st.id) AS stream_ids
-            RETURN w {.*} AS work, ord AS position, authors, stream_ids
-            ORDER BY sort_order ASC, w.title ASC
-            """,
-            id=coll_id,
-        )
-        works = []
+        c = data["col"]
+        works: list[WorkResponse] = []
         read_count = 0
-        async for wr in w_res:
-            col_summary = [{"id": coll_id, "name": c.get("name", ""), "type": c.get("type", ""), "order": wr["position"]}]
-            works.append(_record_to_work(wr["work"], wr["authors"], wr["stream_ids"], col_summary))
+        for wr in data["works"]:
+            col_summary = [{
+                "id": coll_id,
+                "name": c.get("name", ""),
+                "type": c.get("type", ""),
+                "order": wr.get("position"),
+            }]
+            works.append(_raw_to_work_response(
+                wr["work"], wr["authors"], wr["stream_ids"], col_summary
+            ))
             if wr["work"].get("status") == "read":
                 read_count += 1
 
@@ -114,137 +80,74 @@ async def get_collection(
             works=works,
         )
 
-
-async def create_collection(
-    driver: AsyncDriver, req: CreateCollectionRequest
-) -> CollectionResponse:
-    coll_id = collection_id(req.name)
-    async with driver.session() as session:
-        await session.run(
-            """
-            MERGE (c:Collection {id: $id})
-            ON CREATE SET c.name = $name, c.description = $description,
-                          c.type = $type, c.author_id = $author_id
-            """,
-            id=coll_id,
-            name=req.name,
-            description=req.description,
-            type=req.type,
-            author_id=req.author_id,
+    async def create(self, req: CreateCollectionRequest) -> CollectionResponse:
+        coll_id = _collection_id(req.name)
+        collection = await self._collections.create(
+            coll_id=coll_id, name=req.name, description=req.description,
+            type_=req.type, author_id=req.author_id,
         )
-    logger.info("create_collection: id=%s name=%r type=%s", coll_id, req.name, req.type)
-    return CollectionResponse(
-        id=coll_id,
-        name=req.name,
-        description=req.description,
-        type=req.type,
-        author_id=req.author_id,
-        work_count=0,
-        read_count=0,
-    )
+        logger.info("create_collection: id=%s name=%r type=%s", coll_id, req.name, req.type)
+        return CollectionResponse(
+            id=collection.id,
+            name=collection.name,
+            description=collection.description,
+            type=collection.type,
+            author_id=collection.author_id,
+            work_count=0,
+            read_count=0,
+        )
 
-
-async def update_collection(
-    driver: AsyncDriver, coll_id: str, req: UpdateCollectionRequest
-) -> CollectionDetailResponse | None:
-    updates = {k: v for k, v in req.model_dump().items() if v is not None}
-    if updates:
-        async with driver.session() as session:
-            res = await session.run(
-                "MATCH (c:Collection {id: $id}) SET c += $updates RETURN count(c) AS n",
-                id=coll_id, updates=updates,
-            )
-            rec = await res.single()
-            if not rec or rec["n"] == 0:
+    async def update(self, coll_id: str, req: UpdateCollectionRequest) -> CollectionDetailResponse | None:
+        updates = {k: v for k, v in req.model_dump().items() if v is not None}
+        if updates:
+            ok = await self._collections.update(coll_id, updates)
+            if not ok:
                 return None
-    return await get_collection(driver, coll_id)
+        return await self.get(coll_id)
+
+    async def delete(self, coll_id: str) -> bool:
+        return await self._collections.delete(coll_id)
+
+    async def add_work(self, work_id: str, coll_id: str, req: CollectionMembershipRequest) -> bool:
+        return await self._collections.add_work(work_id, coll_id, req.order)
+
+    async def remove_work(self, work_id: str, coll_id: str) -> bool:
+        return await self._collections.remove_work(work_id, coll_id)
+
+    async def add_to_stream(self, coll_id: str, stream_id: str, req: CollectionStreamRequest) -> bool:
+        return await self._collections.add_to_stream(coll_id, stream_id, req.order)
+
+    async def remove_from_stream(self, coll_id: str, stream_id: str) -> bool:
+        return await self._collections.remove_from_stream(coll_id, stream_id)
 
 
-async def delete_collection(driver: AsyncDriver, coll_id: str) -> bool:
-    async with driver.session() as session:
-        res = await session.run(
-            "MATCH (c:Collection {id: $id}) DETACH DELETE c RETURN count(c) AS n",
-            id=coll_id,
-        )
-        rec = await res.single()
-        return bool(rec and rec["n"] > 0)
-
-
-# ---------------------------------------------------------------------------
-# Work membership
-# ---------------------------------------------------------------------------
-
-async def add_work_to_collection(
-    driver: AsyncDriver,
-    work_id: str,
-    coll_id: str,
-    req: CollectionMembershipRequest,
-) -> bool:
-    async with driver.session() as session:
-        res = await session.run(
-            """
-            MATCH (w:Work {id: $work_id})
-            MATCH (c:Collection {id: $coll_id})
-            MERGE (w)-[r:IN_COLLECTION]->(c)
-            SET r.order = $order
-            RETURN count(r) AS n
-            """,
-            work_id=work_id, coll_id=coll_id, order=req.order,
-        )
-        rec = await res.single()
-        return bool(rec and rec["n"] > 0)
-
-
-async def remove_work_from_collection(
-    driver: AsyncDriver, work_id: str, coll_id: str
-) -> bool:
-    async with driver.session() as session:
-        res = await session.run(
-            """
-            MATCH (w:Work {id: $work_id})-[r:IN_COLLECTION]->(c:Collection {id: $coll_id})
-            DELETE r RETURN count(r) AS n
-            """,
-            work_id=work_id, coll_id=coll_id,
-        )
-        rec = await res.single()
-        return bool(rec and rec["n"] > 0)
-
-
-# ---------------------------------------------------------------------------
-# Stream assignment
-# ---------------------------------------------------------------------------
-
-async def add_collection_to_stream(
-    driver: AsyncDriver,
-    coll_id: str,
-    stream_id: str,
-    req: CollectionStreamRequest,
-) -> bool:
-    async with driver.session() as session:
-        res = await session.run(
-            """
-            MATCH (c:Collection {id: $coll_id})
-            MATCH (s:Stream {id: $stream_id})
-            MERGE (c)-[r:IN_STREAM]->(s)
-            SET r.order = $order
-            RETURN count(r) AS n
-            """,
-            coll_id=coll_id, stream_id=stream_id, order=req.order,
-        )
-        rec = await res.single()
-        return bool(rec and rec["n"] > 0)
-
-
-async def remove_collection_from_stream(
-    driver: AsyncDriver, coll_id: str, stream_id: str
-) -> bool:
-    async with driver.session() as session:
-        res = await session.run(
-            """
-            MATCH (c:Collection {id: $coll_id})-[r:IN_STREAM]->(s:Stream {id: $stream_id})
-            DELETE r RETURN count(r) AS n
-            """,
-            coll_id=coll_id, stream_id=stream_id,
-        )
-        rec = await res.single()
-        return bool(rec and rec["n"] > 0)
+def _raw_to_work_response(
+    work_map: dict,
+    authors_list: list[dict],
+    stream_ids: list | None,
+    collections_list: list | None = None,
+) -> WorkResponse:
+    domain = WorkRepository._to_work(work_map, authors_list, collections_list)
+    return WorkResponse(
+        id=domain.id,
+        title=domain.title,
+        status=domain.status,
+        language_read_in=domain.language_read_in,
+        date_read=domain.date_read,
+        density_rating=domain.density_rating,
+        source_type=domain.source_type,
+        personal_note=domain.personal_note,
+        edition_note=domain.edition_note,
+        significance=domain.significance,
+        authors=[ApiAuthorSummary(id=a.id, name=a.name) for a in domain.authors],
+        stream_ids=stream_ids or [],
+        collections=[
+            CollectionSummary(
+                id=c.collection_id,
+                name=c.collection_name,
+                type=c.collection_type,
+                order=c.order,
+            )
+            for c in domain.collections
+        ],
+    )

@@ -1,14 +1,13 @@
 """Stats router — /stats endpoint."""
 from fastapi import APIRouter, Depends
-from neo4j import AsyncDriver
 
-from bildung.dependencies import get_neo4j_driver
+from bildung.dependencies import get_stats_service
 from bildung.models.api import Stats
-from bildung.services import stats as svc
+from bildung.services.stats import StatsService
 
 router = APIRouter(tags=["stats"])
 
 
 @router.get("/stats", response_model=Stats)
-async def get_stats(driver: AsyncDriver = Depends(get_neo4j_driver)) -> Stats:
-    return await svc.get_stats(driver)
+async def get_stats(svc: StatsService = Depends(get_stats_service)) -> Stats:
+    return await svc.get_stats()

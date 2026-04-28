@@ -1,20 +1,16 @@
-import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getCollection, type CollectionDetail } from "../services/api";
+import { useCollection } from "../hooks/useCollections";
 import { WorkRow } from "../components/WorkRow";
 import { ProgressBar } from "../components/ProgressBar";
 import { TYPE_LABELS } from "../components/constants";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 export default function CollectionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [collection, setCollection] = useState<CollectionDetail | null>(null);
+  const { data: collection, isLoading } = useCollection(id ?? "");
 
-  useEffect(() => {
-    if (!id) return;
-    getCollection(id).then(setCollection).catch(console.error);
-  }, [id]);
-
-  if (!collection) return <p className="text-stone-400">Loading…</p>;
+  if (isLoading) return <LoadingSpinner />;
+  if (!collection) return null;
 
   const complete = collection.read_count === collection.work_count && collection.work_count > 0;
   const color = complete ? "#10b981" : "#3b82f6";

@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import {
-  getWork, getStreams, getAuthor,
-  addToStream, removeFromStream, updateWork,
-  type Work, type Stream, type AuthorDetail,
-} from "../services/api";
+import { useQueries } from "@tanstack/react-query";
+import { getAuthor, type AuthorDetail, type Work } from "../services/api";
+import { useWork, useUpdateWork } from "../hooks/useWorks";
+import { useStreams, useAddToStream, useRemoveFromStream } from "../hooks/useStreams";
 import { STATUS_COLORS } from "../components/constants";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
-// Flatten all works from an AuthorDetail (collections + uncollected)
 function allAuthorWorks(a: AuthorDetail): Work[] {
   const seen = new Set<string>();
   const result: Work[] = [];
@@ -28,70 +27,61 @@ const SIGNIFICANCE_OPTIONS = ["", "major", "minor"];
 
 export default function WorkDetail() {
   const { id } = useParams<{ id: string }>();
-  const [work, setWork] = useState<Work | null>(null);
-  const [streams, setStreams] = useState<Stream[]>([]);
-  const [workStreamIds, setWorkStreamIds] = useState<Set<string>>(new Set());
-  const [authorDetails, setAuthorDetails] = useState<AuthorDetail[]>([]);
+  const workId = id ?? "";
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Work>>({});
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  const { data: work, isLoading } = useWork(workId);
+  const { data: streams } = useStreams();
+  const updateWorkMutation = useUpdateWork(workId);
+  const addToStreamMutation = useAddToStream();
+  const removeFromStreamMutation = useRemoveFromStream();
+
+  const authorQueries = useQueries({
+    queries: (work?.authors ?? []).map((a) => ({
+      queryKey: ["authors", a.id],
+      queryFn: () => getAuthor(a.id),
+    })),
+  });
+  const authorDetails = authorQueries.map((q) => q.data).filter(Boolean) as AuthorDetail[];
+
+  const workStreamIds = new Set(work?.stream_ids ?? []);
+
   useEffect(() => {
-    if (!id) return;
-    getWork(id).then((w) => {
-      setWork(w);
-      setWorkStreamIds(new Set(w.stream_ids));
-      setForm({
-        status: w.status,
-        density_rating: w.density_rating ?? undefined,
-        language_read_in: w.language_read_in ?? "",
-        personal_note: w.personal_note ?? "",
-        date_read: w.date_read ?? "",
-        significance: w.significance ?? undefined,
-      });
-      // Fetch other works by the same author(s)
-      Promise.all(w.authors.map((a) => getAuthor(a.id))).then(setAuthorDetails);
+    if (!work) return;
+    setForm({
+      status: work.status,
+      density_rating: work.density_rating ?? undefined,
+      language_read_in: work.language_read_in ?? "",
+      personal_note: work.personal_note ?? "",
+      date_read: work.date_read ?? "",
+      significance: work.significance ?? undefined,
     });
-    getStreams().then(setStreams);
-  }, [id]);
+  }, [work?.id]);
 
-  const save = async () => {
-    if (!id) return;
-    setSaving(true);
+  const save = () => {
     setError("");
-    try {
-      const updated = await updateWork(id, form);
-      setWork(updated);
-      setWorkStreamIds(new Set(updated.stream_ids));
-      setEditing(false);
-    } catch (e: unknown) {
-      setError(String(e));
-    } finally {
-      setSaving(false);
+    updateWorkMutation.mutate(form, {
+      onSuccess: () => setEditing(false),
+      onError: (e) => setError(String(e)),
+    });
+  };
+
+  const toggleStream = (streamId: string, inStream: boolean) => {
+    if (!workId) return;
+    if (inStream) {
+      removeFromStreamMutation.mutate({ workId, streamId });
+    } else {
+      addToStreamMutation.mutate({ workId, streamId });
     }
   };
 
-  const toggleStream = async (streamId: string, inStream: boolean) => {
-    if (!id) return;
-    try {
-      if (inStream) {
-        await removeFromStream(id, streamId);
-        setWorkStreamIds((prev) => { const s = new Set(prev); s.delete(streamId); return s; });
-      } else {
-        await addToStream(id, streamId);
-        setWorkStreamIds((prev) => new Set([...prev, streamId]));
-      }
-    } catch (e: unknown) {
-      console.error(e);
-    }
-  };
+  if (isLoading) return <LoadingSpinner />;
+  if (!work) return null;
 
-  if (!work) return <p className="text-stone-400">Loading…</p>;
-
-  // Other works by same authors, excluding current
   const otherWorks = authorDetails.flatMap((a) =>
-    allAuthorWorks(a).filter((w) => w.id !== id).map((w) => ({ ...w, authorName: a.name }))
+    allAuthorWorks(a).filter((w) => w.id !== workId).map((w) => ({ ...w, authorName: a.name }))
   );
 
   return (
@@ -102,11 +92,14 @@ export default function WorkDetail() {
         <div>
           <h1 className="text-2xl font-bold">{work.title}</h1>
           <p className="text-stone-500 mt-1">
-            {work.authors.map((a) => (
-              <Link key={a.id} to={`/authors/${a.id}`} className="hover:text-stone-700 underline-offset-2 hover:underline">
-                {a.name}
-              </Link>
-            )).reduce((acc, el, i) => i === 0 ? [el] : [...acc, ", ", el] as React.ReactNode[], [] as React.ReactNode[])}
+            {work.authors.map((a, i) => (
+              <span key={a.id}>
+                {i > 0 && ", "}
+                <Link to={`/authors/${a.id}`} className="hover:text-stone-700 underline-offset-2 hover:underline">
+                  {a.name}
+                </Link>
+              </span>
+            ))}
           </p>
         </div>
         <button
@@ -233,10 +226,10 @@ export default function WorkDetail() {
 
           <button
             onClick={save}
-            disabled={saving}
+            disabled={updateWorkMutation.isPending}
             className="bg-stone-900 text-white text-sm px-4 py-1.5 rounded hover:bg-stone-700 disabled:opacity-50"
           >
-            {saving ? "Saving…" : "Save"}
+            {updateWorkMutation.isPending ? "Saving…" : "Save"}
           </button>
         </div>
       )}
@@ -245,7 +238,7 @@ export default function WorkDetail() {
       <div className="mb-8">
         <h2 className="font-semibold mb-2">Streams</h2>
         <div className="space-y-1">
-          {streams.map((s) => {
+          {(streams ?? []).map((s) => {
             const inStream = workStreamIds.has(s.id);
             return (
               <label key={s.id} className="flex items-center gap-2 text-sm cursor-pointer group">
@@ -261,7 +254,7 @@ export default function WorkDetail() {
               </label>
             );
           })}
-          {streams.length === 0 && (
+          {(streams ?? []).length === 0 && (
             <p className="text-stone-400 text-sm">No streams yet. <Link to="/streams" className="underline">Create one</Link>.</p>
           )}
         </div>

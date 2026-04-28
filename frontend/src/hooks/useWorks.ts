@@ -7,7 +7,7 @@ import {
   type Work,
 } from "../services/api";
 
-export function useWorks(params?: { status?: string; author?: string }) {
+export function useWorks(params?: { status?: string; author?: string; limit?: number; offset?: number }) {
   return useQuery({
     queryKey: ["works", params],
     queryFn: () => getWorks(params),

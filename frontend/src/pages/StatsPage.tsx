@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { getStats, type Stats } from "../services/api";
+import { useStats } from "../hooks/useStats";
 import { STATUS_HEX_COLORS } from "../components/constants";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 function Bar({ label, value, max, color }: { label: string; value: number; max: number; color?: string }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
@@ -19,11 +19,10 @@ function Bar({ label, value, max, color }: { label: string; value: number; max: 
 }
 
 export default function StatsPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
+  const { data: stats, isLoading } = useStats();
 
-  useEffect(() => { getStats().then(setStats).catch(console.error); }, []);
-
-  if (!stats) return <p className="text-stone-400">Loading…</p>;
+  if (isLoading) return <LoadingSpinner />;
+  if (!stats) return null;
 
   const maxYear = Math.max(...Object.values(stats.by_year), 1);
   const maxLang = Math.max(...Object.values(stats.by_language), 1);

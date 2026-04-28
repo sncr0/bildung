@@ -297,16 +297,19 @@ npm run dev
 
 ## Handoff
 
-_Fill in after completing this task:_
-
 ### Decisions Made
-<!-- E.g., "Used react-error-boundary library, not custom class component" -->
+- Used `react-error-boundary` (Option A). `ErrorFallback` uses `FallbackProps` from the library directly — the spec's `ErrorFallbackProps` interface typed `error: Error` but the library types it as `unknown`, causing a TS error. Fixed by using `FallbackProps` and narrowing with `instanceof Error`.
+- `WorkDetail.tsx`: form initialization uses `useEffect([work?.id])` (non-data useEffect — acceptable per spec). `toggleStream` calls mutations directly without optimistic updates.
+- `AddWork.tsx`: removed `saving` state entirely; uses `createWorkMutation.isPending` and `mutate(data, { onSuccess, onError })`.
+- `WorkList.tsx`: `handleStatusChange` and `handleAuthorChange` both reset `page` to 0 to avoid empty pages when filter changes.
 
 ### Harder Than Expected
-<!-- E.g., "WorkList pagination required adding limit/offset to the api.ts getWorks function" -->
+- `WorkDetail.tsx` needed `useQueries` for multiple author fetches. The `allAuthorWorks` helper remained unchanged.
+- `useRemoveFromStream` / `useAddToStream` in `useStreams.ts` — the mutation call signature was `{ workId, streamId }` object, confirmed by reading the hook. Make sure `toggleStream` passes this shape, not positional args.
 
 ### Watch Out
-<!-- E.g., "StatsPage chart still re-renders on every refetch — may need memo" -->
+- `streams ?? []` in WorkDetail — `useStreams()` returns `Stream[] | undefined` while loading; the `workStreamIds` Set is derived from `work?.stream_ids ?? []` so toggling works even before streams load.
+- `api.ts` was modified (one allowed exception): added `limit` and `offset` params to `getWorks`. The `useWorks` hook was correspondingly updated to accept and forward these params.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+- None. `npm run build` passes with zero errors and zero warnings.

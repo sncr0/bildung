@@ -1,16 +1,18 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { getAuthors, type AuthorSummary } from "../services/api";
+import { useAuthors } from "../hooks/useAuthors";
 import { ProgressBar } from "../components/ProgressBar";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 export default function AuthorList() {
-  const [authors, setAuthors] = useState<AuthorSummary[]>([]);
   const [search, setSearch] = useState("");
   const [onlyStarted, setOnlyStarted] = useState(false);
 
-  useEffect(() => { getAuthors().then(setAuthors).catch(console.error); }, []);
+  const { data: authors, isLoading } = useAuthors();
 
-  const filtered = authors.filter((a) => {
+  if (isLoading) return <LoadingSpinner />;
+
+  const filtered = (authors ?? []).filter((a) => {
     if (onlyStarted && a.completion_pct === 0) return false;
     if (search && !a.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;

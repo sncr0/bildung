@@ -1,44 +1,35 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getStream, updateStream, type StreamDetail } from "../services/api";
+import { useStream, useUpdateStream } from "../hooks/useStreams";
 import { WorkRow } from "../components/WorkRow";
 import { CollectionBlock } from "../components/CollectionBlock";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 export default function StreamDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [stream, setStream] = useState<StreamDetail | null>(null);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", color: "" });
-  const [saving, setSaving] = useState(false);
 
-  const load = () => {
-    if (!id) return;
-    getStream(id).then((s) => {
-      setStream(s);
-      setForm({ name: s.name, description: s.description ?? "", color: s.color ?? "#6366f1" });
-    }).catch(console.error);
-  };
-
-  useEffect(() => { load(); }, [id]);
+  const { data: stream, isLoading } = useStream(id ?? "");
+  const updateStream = useUpdateStream(id ?? "");
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
-    setSaving(true);
-    try {
-      await updateStream(id, { name: form.name, description: form.description || undefined, color: form.color });
-      setEditing(false);
-      load();
-    } finally {
-      setSaving(false);
-    }
+    updateStream.mutate(
+      { name: form.name, description: form.description || undefined, color: form.color },
+      { onSuccess: () => setEditing(false) }
+    );
   };
 
-  if (!stream) return <p className="text-stone-400">Loading…</p>;
+  if (isLoading) return <LoadingSpinner />;
+  if (!stream) return null;
 
   const accentColor = stream.color ?? "#6366f1";
 
-  // Group collections by type for ordering
+  if (editing && form.name === "" && stream.name) {
+    setForm({ name: stream.name, description: stream.description ?? "", color: stream.color ?? "#6366f1" });
+  }
+
   const majorColls = stream.collections.filter((c) => c.type === "major_works");
   const minorColls = stream.collections.filter((c) => c.type === "minor_works");
   const seriesColls = stream.collections.filter((c) => c.type === "series");
@@ -46,6 +37,11 @@ export default function StreamDetailPage() {
 
   const totalRead = stream.collections.reduce((sum, c) => sum + c.read_count, 0)
     + stream.works.filter((w) => w.status === "read").length;
+
+  const handleEdit = () => {
+    setForm({ name: stream.name, description: stream.description ?? "", color: stream.color ?? "#6366f1" });
+    setEditing(true);
+  };
 
   return (
     <div className="max-w-2xl">
@@ -55,7 +51,7 @@ export default function StreamDetailPage() {
         <span className="w-4 h-4 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
         <h1 className="text-2xl font-bold">{stream.name}</h1>
         <button
-          onClick={() => setEditing(!editing)}
+          onClick={editing ? () => setEditing(false) : handleEdit}
           className="ml-auto text-sm px-3 py-1 border border-stone-300 rounded hover:bg-stone-100"
         >
           {editing ? "Cancel" : "Edit"}
@@ -88,9 +84,9 @@ export default function StreamDetailPage() {
                 className="h-8 w-14 border border-stone-300 rounded" />
             </div>
           </label>
-          <button type="submit" disabled={saving}
+          <button type="submit" disabled={updateStream.isPending}
             className="bg-stone-900 text-white text-sm px-4 py-1.5 rounded hover:bg-stone-700 disabled:opacity-50">
-            {saving ? "Saving…" : "Save"}
+            {updateStream.isPending ? "Saving…" : "Save"}
           </button>
         </form>
       )}

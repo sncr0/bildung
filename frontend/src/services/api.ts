@@ -103,10 +103,12 @@ export interface Stats {
 
 // ---- Works ----------------------------------------------------------------
 
-export const getWorks = (params?: { status?: string; author?: string }) => {
+export const getWorks = (params?: { status?: string; author?: string; limit?: number; offset?: number }) => {
   const qs = new URLSearchParams();
   if (params?.status) qs.set("status", params.status);
   if (params?.author) qs.set("author", params.author);
+  if (params?.limit != null) qs.set("limit", String(params.limit));
+  if (params?.offset != null) qs.set("offset", String(params.offset));
   return req<Work[]>(`/works${qs.toString() ? "?" + qs : ""}`);
 };
 

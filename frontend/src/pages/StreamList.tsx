@@ -1,35 +1,36 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { getStreams, createStream, deleteStream, type Stream } from "../services/api";
+import { useStreams, useCreateStream, useDeleteStream } from "../hooks/useStreams";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 export default function StreamList() {
-  const [streams, setStreams] = useState<Stream[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", description: "", color: "#6366f1" });
-  const [saving, setSaving] = useState(false);
 
-  const load = () => getStreams().then(setStreams).catch(console.error);
-  useEffect(() => { load(); }, []);
+  const { data: streams, isLoading } = useStreams();
+  const createStream = useCreateStream();
+  const deleteStream = useDeleteStream();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
-    setSaving(true);
-    try {
-      await createStream({ name: form.name, description: form.description || undefined, color: form.color });
-      setForm({ name: "", description: "", color: "#6366f1" });
-      setShowForm(false);
-      load();
-    } finally {
-      setSaving(false);
-    }
+    createStream.mutate(
+      { name: form.name, description: form.description || undefined, color: form.color },
+      {
+        onSuccess: () => {
+          setForm({ name: "", description: "", color: "#6366f1" });
+          setShowForm(false);
+        },
+      }
+    );
   };
 
-  const remove = async (id: string, name: string) => {
+  const remove = (id: string, name: string) => {
     if (!confirm(`Delete stream "${name}"? This will not delete the works.`)) return;
-    await deleteStream(id);
-    load();
+    deleteStream.mutate(id);
   };
+
+  if (isLoading) return <LoadingSpinner />;
 
   return (
     <div>
@@ -80,19 +81,19 @@ export default function StreamList() {
           </div>
           <button
             type="submit"
-            disabled={saving}
+            disabled={createStream.isPending}
             className="bg-stone-900 text-white text-sm px-4 py-1.5 rounded hover:bg-stone-700 disabled:opacity-50"
           >
-            {saving ? "Creating…" : "Create stream"}
+            {createStream.isPending ? "Creating…" : "Create stream"}
           </button>
         </form>
       )}
 
-      {streams.length === 0 ? (
+      {(streams ?? []).length === 0 ? (
         <p className="text-stone-400">No streams yet. Create your first one above.</p>
       ) : (
         <div className="space-y-2">
-          {streams.map((s) => (
+          {(streams ?? []).map((s) => (
             <div key={s.id} className="flex items-center gap-3 p-3 bg-white border border-stone-200 rounded-lg hover:border-stone-300 transition-colors">
               <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: s.color ?? "#999" }} />
               <Link to={`/streams/${s.id}`} className="flex-1 font-medium hover:text-stone-600">

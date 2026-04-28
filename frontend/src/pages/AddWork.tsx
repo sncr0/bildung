@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { createWork } from "../services/api";
+import { useCreateWork } from "../hooks/useWorks";
 
 const LANGS = ["EN", "NL", "FR", "DE", "Other"];
 const STATUS_OPTIONS = ["to_read", "reading", "read"];
@@ -17,32 +17,27 @@ export default function AddWork() {
     source_type: "fiction" as const,
     personal_note: "",
   });
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const createWorkMutation = useCreateWork();
 
   const set = (field: string, value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
 
-  const submit = async (e: React.FormEvent) => {
+  const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title.trim() || !form.author.trim()) {
       setError("Title and author are required.");
       return;
     }
-    setSaving(true);
     setError("");
-    try {
-      const work = await createWork({
-        ...form,
-        date_read: form.date_read || undefined,
-        personal_note: form.personal_note || undefined,
-      });
-      navigate(`/works/${work.id}`);
-    } catch (e: unknown) {
-      setError(String(e));
-    } finally {
-      setSaving(false);
-    }
+    createWorkMutation.mutate(
+      { ...form, date_read: form.date_read || undefined, personal_note: form.personal_note || undefined },
+      {
+        onSuccess: (work) => navigate(`/works/${work.id}`),
+        onError: (e) => setError(String(e)),
+      }
+    );
   };
 
   return (
@@ -133,10 +128,10 @@ export default function AddWork() {
 
         <button
           type="submit"
-          disabled={saving}
+          disabled={createWorkMutation.isPending}
           className="w-full bg-stone-900 text-white py-2 rounded hover:bg-stone-700 disabled:opacity-50 font-medium"
         >
-          {saving ? "Adding…" : "Add book"}
+          {createWorkMutation.isPending ? "Adding…" : "Add book"}
         </button>
       </form>
     </div>

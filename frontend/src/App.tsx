@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink } from "react-router-dom";
+import { ErrorBoundary } from "react-error-boundary";
 import WorkList from "./pages/WorkList";
 import WorkDetail from "./pages/WorkDetail";
 import AddWork from "./pages/AddWork";
@@ -8,6 +9,7 @@ import AuthorList from "./pages/AuthorList";
 import AuthorDetail from "./pages/AuthorDetail";
 import CollectionDetailPage from "./pages/CollectionDetail";
 import StatsPage from "./pages/StatsPage";
+import { ErrorFallback } from "./components/ErrorFallback";
 
 const nav = [
   { to: "/", label: "Books" },
@@ -39,17 +41,19 @@ export default function App() {
       </nav>
 
       <main className="max-w-5xl mx-auto px-6 py-8">
-        <Routes>
-          <Route path="/" element={<WorkList />} />
-          <Route path="/works/:id" element={<WorkDetail />} />
-          <Route path="/add" element={<AddWork />} />
-          <Route path="/authors" element={<AuthorList />} />
-          <Route path="/authors/:id" element={<AuthorDetail />} />
-          <Route path="/streams" element={<StreamList />} />
-          <Route path="/streams/:id" element={<StreamDetail />} />
-          <Route path="/collections/:id" element={<CollectionDetailPage />} />
-          <Route path="/stats" element={<StatsPage />} />
-        </Routes>
+        <ErrorBoundary FallbackComponent={ErrorFallback}>
+          <Routes>
+            <Route path="/" element={<WorkList />} />
+            <Route path="/works/:id" element={<WorkDetail />} />
+            <Route path="/add" element={<AddWork />} />
+            <Route path="/authors" element={<AuthorList />} />
+            <Route path="/authors/:id" element={<AuthorDetail />} />
+            <Route path="/streams" element={<StreamList />} />
+            <Route path="/streams/:id" element={<StreamDetail />} />
+            <Route path="/collections/:id" element={<CollectionDetailPage />} />
+            <Route path="/stats" element={<StatsPage />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );

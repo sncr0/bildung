@@ -1,27 +1,22 @@
-import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getAuthor, type AuthorDetail } from "../services/api";
+import { useAuthor } from "../hooks/useAuthors";
 import { WorkRow } from "../components/WorkRow";
 import { ProgressBar } from "../components/ProgressBar";
 import { CollectionBlock } from "../components/CollectionBlock";
+import { LoadingSpinner } from "../components/LoadingSpinner";
 
 export default function AuthorDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [author, setAuthor] = useState<AuthorDetail | null>(null);
+  const { data: author, isLoading } = useAuthor(id ?? "");
 
-  useEffect(() => {
-    if (!id) return;
-    getAuthor(id).then(setAuthor).catch(console.error);
-  }, [id]);
-
-  if (!author) return <p className="text-stone-400">Loading…</p>;
+  if (isLoading) return <LoadingSpinner />;
+  if (!author) return null;
 
   const majorCollections = author.collections.filter((c) => c.type === "major_works");
   const minorCollections = author.collections.filter((c) => c.type === "minor_works");
   const seriesCollections = author.collections.filter((c) => c.type === "series");
   const anthologyCollections = author.collections.filter((c) => c.type === "anthology");
 
-  // Stats from major_works collection
   const majorColl = majorCollections[0];
   const hasMajorColl = majorColl && majorColl.work_count > 0;
   const mainColor = author.completion_pct >= 1 ? "#10b981" : "#3b82f6";

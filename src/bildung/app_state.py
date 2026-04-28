@@ -8,7 +8,7 @@ import httpx
 from neo4j import AsyncDriver
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from bildung.config import Settings, settings as _default_settings
+from bildung.config import Settings, load_settings
 from bildung.db.neo4j import build_driver, init_constraints
 from bildung.db.postgres import build_engine, build_session_factory
 from bildung.services.openlibrary import OpenLibraryClient
@@ -26,7 +26,7 @@ class AppState:
     @classmethod
     async def create(cls, cfg: Settings | None = None) -> "AppState":
         if cfg is None:
-            cfg = _default_settings
+            cfg = load_settings()
         engine = build_engine(cfg)
         session_factory = build_session_factory(engine)
         driver = build_driver(cfg)

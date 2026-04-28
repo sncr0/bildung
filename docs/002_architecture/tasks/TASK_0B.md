@@ -159,13 +159,13 @@ grep -n "class Stats" src/bildung/routers/stats.py
 _Fill in after completing this task:_
 
 ### Decisions Made
-<!-- E.g., "Placed Stats model at end of api.py after SeriesMembershipRequest" -->
+Placed Stats model at the end of api.py under a new "Stats" section, after SeriesMembershipRequest. Copied all 6 Cypher queries verbatim from the router.
 
 ### Harder Than Expected
-<!-- E.g., "The `by_year` query returns mixed types — some years are strings, some ints" -->
+Nothing unexpected — straightforward move.
 
 ### Watch Out (for Task 0C)
-<!-- E.g., "services/stats.py imports logger but doesn't use it yet — that's intentional for parity with other services" -->
+`services/stats.py` imports `logger` but doesn't use it yet — intentional for parity with other services. The `Stats` import in `services/stats.py` creates a dependency on `models/api.py`; keep that import path stable.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+None.

@@ -224,13 +224,17 @@ curl -s http://localhost:8000/stats | python3 -m json.tool
 _Fill in after completing this task:_
 
 ### Decisions Made
-<!-- E.g., ".env had POSTGRES_PORT=5433, updated to 5432" -->
+- `.env` had `POSTGRES_PORT=5433`; updated to `5432` to match docker-compose (now `5432:5432`).
+- Kept the local variable named `stream_id` in `create_stream()` (spec suggested `sid`) — less churn since it's only used 3 times in the same function.
+- `openlibrary.py` still imports `field` from dataclasses after removing `ManagedOLClient`; removed it.
 
 ### Harder Than Expected
-<!-- E.g., "seed_enrichments.py used `settings` in 3 places, not just 1" -->
+Nothing unexpected. All changes were mechanical.
 
 ### Watch Out (for Task 1A)
-<!-- E.g., "load_settings() now requires a .env file to exist — tests need to handle this" -->
+- `load_settings()` reads `.env` by default. In tests, pass `env_file="..."` or ensure a `.env` exists — or mock Settings directly. It will raise a pydantic validation error if required fields are missing and no `.env` is found.
+- `services/openlibrary.py` no longer has `field` imported (removed with `ManagedOLClient`) — don't re-add it.
+- `reading_list.py` still has `_merge_author` removed; `_upsert_author` is the real implementation.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+None.

@@ -198,13 +198,20 @@ grep -r "ProgressBar" frontend/src/pages/      # Should return only import lines
 _Fill in after completing this task:_
 
 ### Decisions Made
-<!-- What choices did you make? E.g., "Standardized ProgressBar height to h-2 everywhere" -->
+- Standardized ProgressBar height to `h-2` default, with `height="h-1.5"` for AuthorList. Dropped the "works" suffix from the AuthorList count label (was `{read}/{total} works`, now `{read}/{total}`).
+- CollectionBlock is the StreamDetail variant (shows type label, takes accentColor). AuthorDetail now passes `accentColor="#3b82f6"` and gains the type label inside each block (slightly redundant with section headers but not harmful).
+- WorkRow is the CollectionDetail variant: shows authors, significance star, supports optional `order`. AuthorDetail previously omitted authors from its WorkRow — it now shows them. Minor visual change, accepted for unification.
+- STATUS_COLORS in WorkList is still used inline (the badge has extra layout classes `px-2 font-medium shrink-0 mt-0.5` that differ from the standard StatusBadge). Imported from constants, not defined locally — satisfies the acceptance criteria.
 
 ### Harder Than Expected
-<!-- What was tricky? E.g., "CollectionBlock in StreamDetail had an extra accentColor prop" -->
+Three WorkRow variants had genuine differences (authors, significance, group-hover). CollectionDetail was most complete; used it as canonical.
 
 ### Watch Out (for Task 4A)
-<!-- What should the next implementer know? E.g., "WorkRow accepts Work type directly, no wrapper needed" -->
+- `WorkRow` accepts `Work` directly plus optional `order?: number | null`. No wrapper needed.
+- `CollectionBlock` requires `accentColor` (not optional) — callers must provide it.
+- `ProgressBar` `height` prop accepts a Tailwind class string (`"h-2"`, `"h-1.5"`), not a number.
+- No barrel export — import each component from its own file.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+- WorkRow shows author names even in AuthorDetail (minor visual change; spec said "core is identical" so unification was the goal).
+- CollectionBlock shows type label in AuthorDetail (spec: "do not add new props" meant we couldn't conditionally hide it).

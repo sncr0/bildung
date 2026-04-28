@@ -1,22 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getWorks, getStreams, type Work, type Stream } from "../services/api";
-
-const STATUS_LABELS: Record<string, string> = {
-  read: "Read",
-  reading: "Reading",
-  to_read: "To read",
-  abandoned: "Abandoned",
-  unread: "Unread",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  read: "bg-emerald-100 text-emerald-800",
-  reading: "bg-blue-100 text-blue-800",
-  to_read: "bg-stone-100 text-stone-600",
-  abandoned: "bg-red-100 text-red-700",
-  unread: "bg-stone-100 text-stone-500",
-};
+import { STATUS_LABELS, STATUS_COLORS } from "../components/constants";
 
 export default function WorkList() {
   const [works, setWorks] = useState<Work[]>([]);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getStats, type Stats } from "../services/api";
+import { STATUS_HEX_COLORS } from "../components/constants";
 
 function Bar({ label, value, max, color }: { label: string; value: number; max: number; color?: string }) {
   const pct = max > 0 ? (value / max) * 100 : 0;
@@ -27,13 +28,6 @@ export default function StatsPage() {
   const maxYear = Math.max(...Object.values(stats.by_year), 1);
   const maxLang = Math.max(...Object.values(stats.by_language), 1);
 
-  const STATUS_COLORS: Record<string, string> = {
-    read: "#10b981",
-    reading: "#3b82f6",
-    to_read: "#a8a29e",
-    abandoned: "#ef4444",
-  };
-
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold mb-8">Stats</h1>
@@ -59,7 +53,7 @@ export default function StatsPage() {
           {Object.entries(stats.by_status)
             .sort(([, a], [, b]) => b - a)
             .map(([status, n]) => (
-              <Bar key={status} label={status} value={n} max={stats.total_works} color={STATUS_COLORS[status]} />
+              <Bar key={status} label={status} value={n} max={stats.total_works} color={STATUS_HEX_COLORS[status]} />
             ))}
         </div>
       </section>

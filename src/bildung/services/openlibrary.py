@@ -7,7 +7,7 @@ OpenLibrary is a nonprofit — keep requests respectful:
 """
 import asyncio
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 
@@ -221,27 +221,3 @@ def _parse_year(raw: str) -> int | None:
     m = re.search(r"\b(\d{4})\b", raw)
     return int(m.group(1)) if m else None
 
-
-# ------------------------------------------------------------------
-# Factory — used by FastAPI lifespan and tests
-# ------------------------------------------------------------------
-
-def build_ol_client(request_delay: float = 0.5) -> "ManagedOLClient":
-    """Return a context-managed client suitable for use in lifespan."""
-    return ManagedOLClient(request_delay=request_delay)
-
-
-@dataclass
-class ManagedOLClient:
-    """Wraps OpenLibraryClient + httpx.AsyncClient lifecycle."""
-    request_delay: float = 0.5
-    _http: httpx.AsyncClient = field(init=False)
-    _ol: OpenLibraryClient = field(init=False)
-
-    async def __aenter__(self) -> "OpenLibraryClient":
-        self._http = httpx.AsyncClient(headers={"User-Agent": "Bildung/0.1 (personal reading tracker)"})
-        self._ol = OpenLibraryClient(self._http, request_delay=self.request_delay)
-        return self._ol
-
-    async def __aexit__(self, *_) -> None:
-        await self._http.aclose()

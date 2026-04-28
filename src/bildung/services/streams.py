@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import datetime, timezone
 
 from neo4j import AsyncDriver
 
 logger = logging.getLogger(__name__)
 
+from bildung.ids import stream_id as _stream_id
 from bildung.models.api import (
     AssignStreamRequest,
     CollectionDetailResponse,
@@ -167,7 +167,7 @@ async def get_stream(driver: AsyncDriver, stream_id: str) -> StreamDetailRespons
 
 
 async def create_stream(driver: AsyncDriver, req: CreateStreamRequest) -> StreamResponse:
-    stream_id = str(uuid.uuid4())
+    stream_id = _stream_id(req.name)
     created_at = datetime.now(timezone.utc).isoformat()
     async with driver.session() as session:
         await session.run(

@@ -363,13 +363,19 @@ npm run dev
 _Fill in after completing this task:_
 
 ### Decisions Made
-<!-- E.g., "Set staleTime to 30s globally — can be overridden per hook" -->
+- `staleTime: 30_000` set globally in QueryClient; individual hooks can override if needed.
+- `useUpdateStream` and `useUpdateCollection` use `Parameters<typeof fn>[1]` to infer the body type from the api.ts signature — avoids duplicating type definitions.
+- Mutation `onSuccess` invalidates aggressively (e.g. updating a work also invalidates authors and stats) since this is a single-user app and cache freshness matters more than optimal invalidation.
 
 ### Harder Than Expected
-<!-- E.g., "TypeScript inference on mutation parameters was tricky" -->
+Nothing unexpected — all hooks are straightforward wrappers.
 
 ### Watch Out (for Task 4B)
-<!-- E.g., "useWork returns { data, isLoading, error } — pages need to handle all three states" -->
+- All query hooks return `{ data, isLoading, isError, error }` — pages must handle all three states.
+- Detail hooks (`useWork`, `useAuthor`, `useStream`, `useCollection`) have `enabled: !!id` — they won't fire if `id` is empty string.
+- Mutation hooks return `{ mutate, mutateAsync, isPending, isError }` — use `mutateAsync` when you need to await the result (e.g., navigate after create).
+- `useUpdateWork(id)` and `useUpdateStream(id)` take the ID at hook-call time, not mutation time — call these inside the component that already knows the ID.
+- No barrel export — always import from specific file: `import { useWorks } from "../hooks/useWorks"`.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+None.

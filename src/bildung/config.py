@@ -35,4 +35,6 @@ class Settings(BaseSettings):
         )
 
 
-settings = Settings()
+def load_settings(env_file: str = ".env") -> Settings:
+    """Load settings from the specified env file. Call explicitly, not at import time."""
+    return Settings(_env_file=env_file)

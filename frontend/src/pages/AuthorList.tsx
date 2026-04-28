@@ -1,25 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getAuthors, type AuthorSummary } from "../services/api";
-
-function CompletionBar({ pct, total, read }: {
-  pct: number; total: number; read: number;
-}) {
-  const color = pct >= 1 ? "#10b981" : pct >= 0.5 ? "#3b82f6" : "#a8a29e";
-  return (
-    <div className="flex items-center gap-2 min-w-0">
-      <div className="flex-1 bg-stone-100 rounded-full h-1.5 overflow-hidden min-w-[60px]">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(pct * 100, 100)}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-xs text-stone-400 shrink-0 w-20">
-        {read}/{total} works
-      </span>
-    </div>
-  );
-}
+import { ProgressBar } from "../components/ProgressBar";
 
 export default function AuthorList() {
   const [authors, setAuthors] = useState<AuthorSummary[]>([]);
@@ -71,30 +53,38 @@ export default function AuthorList() {
       </div>
 
       <div className="divide-y divide-stone-100">
-        {sorted.map((a) => (
-          <Link
-            key={a.id}
-            to={`/authors/${a.id}`}
-            className="flex items-center gap-4 py-3 hover:bg-stone-50 -mx-2 px-2 rounded transition-colors group"
-          >
-            <div className="flex-1 min-w-0">
-              <div className="font-medium text-sm group-hover:text-stone-700">{a.name}</div>
-              {a.total_works > 0 && (
-                <CompletionBar pct={a.completion_pct} total={a.total_works} read={a.read_works} />
-              )}
-            </div>
-            <div className="text-right shrink-0">
-              <div className="text-sm font-medium">
-                {a.completion_pct > 0
-                  ? `${Math.round(a.completion_pct * 100)}%`
-                  : `${a.total_works}`}
+        {sorted.map((a) => {
+          const color = a.completion_pct >= 1 ? "#10b981" : a.completion_pct >= 0.5 ? "#3b82f6" : "#a8a29e";
+          return (
+            <Link
+              key={a.id}
+              to={`/authors/${a.id}`}
+              className="flex items-center gap-4 py-3 hover:bg-stone-50 -mx-2 px-2 rounded transition-colors group"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm group-hover:text-stone-700">{a.name}</div>
+                {a.total_works > 0 && (
+                  <ProgressBar
+                    read={a.read_works}
+                    total={a.total_works}
+                    color={color}
+                    height="h-1.5"
+                  />
+                )}
               </div>
-              <div className="text-xs text-stone-400">
-                {a.completion_pct > 0 ? "complete" : "works"}
+              <div className="text-right shrink-0">
+                <div className="text-sm font-medium">
+                  {a.completion_pct > 0
+                    ? `${Math.round(a.completion_pct * 100)}%`
+                    : `${a.total_works}`}
+                </div>
+                <div className="text-xs text-stone-400">
+                  {a.completion_pct > 0 ? "complete" : "works"}
+                </div>
               </div>
-            </div>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

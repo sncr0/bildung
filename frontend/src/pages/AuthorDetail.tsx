@@ -1,97 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { getAuthor, type AuthorDetail, type CollectionDetail, type Work } from "../services/api";
-
-const STATUS_COLORS: Record<string, string> = {
-  read: "bg-emerald-100 text-emerald-800",
-  reading: "bg-blue-100 text-blue-800",
-  to_read: "bg-stone-100 text-stone-500",
-  abandoned: "bg-red-100 text-red-700",
-  unread: "bg-stone-100 text-stone-400",
-};
-
-const COLLECTION_TYPE_LABEL: Record<string, string> = {
-  major_works: "Major Works",
-  minor_works: "Minor Works",
-  series: "Series",
-  anthology: "Anthology",
-};
-
-function WorkRow({ work }: { work: Work }) {
-  return (
-    <Link
-      to={`/works/${work.id}`}
-      className="flex items-center gap-3 py-2 hover:bg-stone-50 -mx-2 px-2 rounded transition-colors group"
-    >
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium group-hover:text-stone-700 truncate">{work.title}</div>
-        {work.date_read && (
-          <div className="text-xs text-stone-400">{work.date_read}</div>
-        )}
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {work.significance === "major" && (
-          <span className="text-xs text-amber-600 font-medium">★</span>
-        )}
-        <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUS_COLORS[work.status] ?? "bg-stone-100"}`}>
-          {work.status.replace("_", " ")}
-        </span>
-      </div>
-    </Link>
-  );
-}
-
-function ProgressBar({ read, total, color = "#10b981" }: { read: number; total: number; color?: string }) {
-  const pct = total > 0 ? (read / total) * 100 : 0;
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 bg-stone-100 rounded-full h-2 overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all"
-          style={{ width: `${pct}%`, backgroundColor: color }}
-        />
-      </div>
-      <span className="text-xs text-stone-500 shrink-0">{read}/{total}</span>
-    </div>
-  );
-}
-
-function CollectionSection({ collection }: { collection: CollectionDetail }) {
-  const complete = collection.read_count === collection.work_count && collection.work_count > 0;
-  const sortedWorks = [...collection.works].sort((a, b) => {
-    const ao = a.collections.find((c) => c.id === collection.id)?.order ?? 99;
-    const bo = b.collections.find((c) => c.id === collection.id)?.order ?? 99;
-    if (ao !== bo) return ao - bo;
-    return a.title.localeCompare(b.title);
-  });
-
-  return (
-    <div className="mb-5">
-      <div className="flex items-center gap-2 mb-1.5">
-        <Link
-          to={`/collections/${collection.id}`}
-          className="text-sm font-semibold text-stone-700 hover:text-stone-900"
-        >
-          {collection.name}
-        </Link>
-        {complete && <span className="text-xs text-emerald-600 font-medium">✓ complete</span>}
-        {collection.description && (
-          <span className="text-xs text-stone-400 truncate hidden sm:block">{collection.description}</span>
-        )}
-      </div>
-      <div className="mb-2">
-        <ProgressBar
-          read={collection.read_count}
-          total={collection.work_count}
-          color={complete ? "#10b981" : "#3b82f6"}
-        />
-      </div>
-      <div className="pl-2 border-l-2 border-stone-100">
-        {sortedWorks.map((w) => <WorkRow key={w.id} work={w} />)}
-      </div>
-    </div>
-  );
-}
+import { getAuthor, type AuthorDetail } from "../services/api";
+import { WorkRow } from "../components/WorkRow";
+import { ProgressBar } from "../components/ProgressBar";
+import { CollectionBlock } from "../components/CollectionBlock";
 
 export default function AuthorDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -167,7 +79,7 @@ export default function AuthorDetailPage() {
           <h2 className="font-semibold text-stone-700 mb-3 uppercase text-xs tracking-widest flex items-center gap-1">
             <span className="text-amber-500">★</span> Major Works
           </h2>
-          {majorCollections.map((c) => <CollectionSection key={c.id} collection={c} />)}
+          {majorCollections.map((c) => <CollectionBlock key={c.id} collection={c} accentColor="#3b82f6" />)}
         </section>
       )}
 
@@ -175,7 +87,7 @@ export default function AuthorDetailPage() {
       {seriesCollections.length > 0 && (
         <section className="mb-6">
           <h2 className="font-semibold text-stone-700 mb-3 uppercase text-xs tracking-widest">Series</h2>
-          {seriesCollections.map((c) => <CollectionSection key={c.id} collection={c} />)}
+          {seriesCollections.map((c) => <CollectionBlock key={c.id} collection={c} accentColor="#3b82f6" />)}
         </section>
       )}
 
@@ -183,7 +95,7 @@ export default function AuthorDetailPage() {
       {minorCollections.length > 0 && (
         <section className="mb-6">
           <h2 className="font-semibold text-stone-600 mb-3 uppercase text-xs tracking-widest">Minor Works</h2>
-          {minorCollections.map((c) => <CollectionSection key={c.id} collection={c} />)}
+          {minorCollections.map((c) => <CollectionBlock key={c.id} collection={c} accentColor="#3b82f6" />)}
         </section>
       )}
 
@@ -191,7 +103,7 @@ export default function AuthorDetailPage() {
       {anthologyCollections.length > 0 && (
         <section className="mb-6">
           <h2 className="font-semibold text-stone-500 mb-3 uppercase text-xs tracking-widest">Anthologies</h2>
-          {anthologyCollections.map((c) => <CollectionSection key={c.id} collection={c} />)}
+          {anthologyCollections.map((c) => <CollectionBlock key={c.id} collection={c} accentColor="#3b82f6" />)}
         </section>
       )}
 

@@ -5,6 +5,7 @@ import {
   addToStream, removeFromStream, updateWork,
   type Work, type Stream, type AuthorDetail,
 } from "../services/api";
+import { STATUS_COLORS } from "../components/constants";
 
 // Flatten all works from an AuthorDetail (collections + uncollected)
 function allAuthorWorks(a: AuthorDetail): Work[] {
@@ -24,13 +25,6 @@ function allAuthorWorks(a: AuthorDetail): Work[] {
 const DENSITY_LABELS = ["light", "moderate", "dense", "grueling"];
 const STATUS_OPTIONS = ["to_read", "reading", "read", "abandoned"];
 const SIGNIFICANCE_OPTIONS = ["", "major", "minor"];
-
-const STATUS_COLORS: Record<string, string> = {
-  read: "bg-emerald-100 text-emerald-800",
-  reading: "bg-blue-100 text-blue-800",
-  to_read: "bg-stone-100 text-stone-500",
-  abandoned: "bg-red-100 text-red-700",
-};
 
 export default function WorkDetail() {
   const { id } = useParams<{ id: string }>();

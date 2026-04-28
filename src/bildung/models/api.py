@@ -201,3 +201,16 @@ class UpdateSeriesRequest(BaseModel):
 class SeriesMembershipRequest(BaseModel):
     """Body for PUT /works/{id}/series/{series_id}."""
     order: int | None = None
+
+
+# ---------------------------------------------------------------------------
+# Stats
+# ---------------------------------------------------------------------------
+
+class Stats(BaseModel):
+    total_works: int
+    total_authors: int
+    total_streams: int
+    by_status: dict[str, int]
+    by_year: dict[str, int]
+    by_language: dict[str, int]

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 
-from bildung.config import settings
+from bildung.config import load_settings
 from bildung.db.neo4j import build_driver
 from bildung.ids import author_id as _author_id
 from bildung.ids import collection_id as _coll_id
@@ -620,6 +620,7 @@ STREAM_COLLECTIONS: dict[str, list[str]] = {
 # ---------------------------------------------------------------------------
 
 async def main() -> None:
+    settings = load_settings()
     driver = build_driver(settings)
     async with driver.session() as s:
 

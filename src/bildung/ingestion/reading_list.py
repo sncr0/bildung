@@ -24,7 +24,7 @@ from pathlib import Path
 
 from neo4j import AsyncDriver
 
-from bildung.config import settings
+from bildung.config import load_settings
 from bildung.db.neo4j import build_driver, init_constraints
 from bildung.ids import author_id as _author_id
 from bildung.ids import work_id as _work_id
@@ -110,25 +110,6 @@ def parse_reading_list(text: str) -> list[ParsedEntry]:
 # ---------------------------------------------------------------------------
 # Neo4j writer
 # ---------------------------------------------------------------------------
-
-async def _merge_author(session, name: str) -> bool:
-    """MERGE author by deterministic id. Returns True if newly created."""
-    aid = _author_id(name)
-    result = await session.run(
-        """
-        MERGE (a:Author {id: $id})
-        ON CREATE SET a.name = $name
-        RETURN a.name AS name, (a.name IS NULL OR a.name = $name) AS is_new
-        """,
-        id=aid,
-        name=name,
-    )
-    record = await result.single()
-    # is_new is True when the MERGE triggered ON CREATE
-    # We detect creation by checking if it existed before via a second approach:
-    # simpler: run a plain MATCH first
-    return False  # placeholder — handled below
-
 
 async def _upsert_author(session, name: str) -> bool:
     """Returns True if newly created."""
@@ -248,6 +229,7 @@ async def ingest(entries: list[ParsedEntry], driver: AsyncDriver) -> IngestionRe
 
 async def _main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    settings = load_settings()
 
     reading_list_path = Path(__file__).resolve().parents[4] / "reading_list.txt"
     if not reading_list_path.exists():

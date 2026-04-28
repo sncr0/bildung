@@ -81,3 +81,150 @@ class SrsSchedule(Base):
     interval_days: Mapped[int] = mapped_column(INTEGER, nullable=False, server_default="1")
     ease_factor: Mapped[Decimal] = mapped_column(nullable=False, server_default="2.5")
     consecutive_correct: Mapped[int] = mapped_column(INTEGER, nullable=False, server_default="0")
+
+
+# ---------------------------------------------------------------------------
+# Entity tables — scalar properties for works, authors, collections, etc.
+# ---------------------------------------------------------------------------
+
+class WorkEntity(Base):
+    """Work entity — scalar properties stored in PostgreSQL."""
+    __tablename__ = "works"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    title: Mapped[str] = mapped_column(TEXT, nullable=False)
+    status: Mapped[str] = mapped_column(VARCHAR, nullable=False, server_default="to_read")
+    language_read_in: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    date_read: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    density_rating: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    source_type: Mapped[str] = mapped_column(VARCHAR, nullable=False, server_default="fiction")
+    personal_note: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    edition_note: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    significance: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+    year_published: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+    original_language: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    original_title: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    openlibrary_id: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    isbn: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    cover_url: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class AuthorEntity(Base):
+    __tablename__ = "authors"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(TEXT, nullable=False)
+    birth_year: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+    death_year: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+    nationality: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    primary_language: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    openlibrary_id: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CollectionEntity(Base):
+    __tablename__ = "collections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(TEXT, nullable=False)
+    description: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    type: Mapped[str] = mapped_column(VARCHAR, nullable=False, server_default="anthology")
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("authors.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class StreamEntity(Base):
+    __tablename__ = "streams"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(TEXT, nullable=False)
+    description: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    color: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class SeriesEntity(Base):
+    __tablename__ = "series"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    name: Mapped[str] = mapped_column(TEXT, nullable=False)
+    description: Mapped[str | None] = mapped_column(TEXT, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# --- Junction tables ---
+
+class WorkAuthor(Base):
+    __tablename__ = "work_authors"
+
+    work_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("works.id"), primary_key=True
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("authors.id"), primary_key=True
+    )
+
+
+class WorkCollection(Base):
+    __tablename__ = "work_collections"
+
+    work_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("works.id"), primary_key=True
+    )
+    collection_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("collections.id"), primary_key=True
+    )
+    order: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+
+
+class WorkStream(Base):
+    __tablename__ = "work_streams"
+
+    work_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("works.id"), primary_key=True
+    )
+    stream_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("streams.id"), primary_key=True
+    )
+    position: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+
+
+class CollectionStream(Base):
+    __tablename__ = "collection_streams"
+
+    collection_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("collections.id"), primary_key=True
+    )
+    stream_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("streams.id"), primary_key=True
+    )
+    order: Mapped[int | None] = mapped_column(INTEGER, nullable=True)
+
+
+class WorkSeries(Base):
+    __tablename__ = "work_series"
+
+    work_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("works.id"), primary_key=True
+    )
+    series_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("series.id"), primary_key=True
+    )
+    order: Mapped[int | None] = mapped_column(INTEGER, nullable=True)

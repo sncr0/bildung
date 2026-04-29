@@ -19,13 +19,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from neo4j import AsyncDriver
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bildung.config import load_settings
 from bildung.db.neo4j import build_driver, init_constraints
+from bildung.db.postgres import build_engine, build_session_factory
 from bildung.ids import author_id as _author_id
 from bildung.ids import work_id as _work_id
 
@@ -174,7 +178,42 @@ async def _link_author_work(session, primary_author: str, title: str) -> None:
     )
 
 
-async def ingest(entries: list[ParsedEntry], driver: AsyncDriver) -> IngestionResult:
+async def _pg_upsert_author(pg: AsyncSession, name: str) -> None:
+    aid = _author_id(name)
+    await pg.execute(
+        text("INSERT INTO authors (id, name) VALUES (:id, :name) ON CONFLICT (id) DO NOTHING"),
+        {"id": uuid.UUID(aid), "name": name},
+    )
+
+
+async def _pg_upsert_work(pg: AsyncSession, entry: ParsedEntry, primary_author: str) -> None:
+    wid = _work_id(entry.title, primary_author)
+    date_read = str(entry.year_read) if entry.year_read else None
+    await pg.execute(
+        text("""
+            INSERT INTO works (id, title, status, language_read_in, date_read, source_type)
+            VALUES (:id, :title, 'read', :language_read_in, :date_read, 'fiction')
+            ON CONFLICT (id) DO NOTHING
+        """),
+        {"id": uuid.UUID(wid), "title": entry.title,
+         "language_read_in": entry.language_read_in, "date_read": date_read},
+    )
+
+
+async def _pg_link_author_work(pg: AsyncSession, author_name: str, title: str, primary_author: str) -> None:
+    aid = _author_id(author_name)
+    wid = _work_id(title, primary_author)
+    await pg.execute(
+        text("INSERT INTO work_authors (work_id, author_id) VALUES (:wid, :aid) ON CONFLICT DO NOTHING"),
+        {"wid": uuid.UUID(wid), "aid": uuid.UUID(aid)},
+    )
+
+
+async def ingest(
+    entries: list[ParsedEntry],
+    driver: AsyncDriver,
+    session_factory: async_sessionmaker[AsyncSession] | None = None,
+) -> IngestionResult:
     result = IngestionResult()
 
     async with driver.session() as session:
@@ -202,7 +241,6 @@ async def ingest(entries: list[ParsedEntry], driver: AsyncDriver) -> IngestionRe
                 # WROTE edges
                 for author_name in entry.authors:
                     await _link_author_work(session, author_name, entry.title)
-                    # For secondary authors, link them to the work too
                     if author_name != primary_author:
                         aid = _author_id(author_name)
                         wid = _work_id(entry.title, primary_author)
@@ -219,6 +257,21 @@ async def ingest(entries: list[ParsedEntry], driver: AsyncDriver) -> IngestionRe
                 msg = f"{entry.authors} - {entry.title}: {exc}"
                 result.errors.append(msg)
                 logger.error("Error ingesting %r: %s", entry.title, exc)
+
+    # Mirror to PostgreSQL
+    if session_factory is not None:
+        async with session_factory() as pg:
+            for entry in entries:
+                try:
+                    primary_author = entry.authors[0]
+                    for author_name in entry.authors:
+                        await _pg_upsert_author(pg, author_name)
+                    await _pg_upsert_work(pg, entry, primary_author)
+                    for author_name in entry.authors:
+                        await _pg_link_author_work(pg, author_name, entry.title, primary_author)
+                except Exception as exc:
+                    logger.error("PG ingestion error for %r: %s", entry.title, exc)
+            await pg.commit()
 
     return result
 
@@ -243,11 +296,14 @@ async def _main() -> None:
     logger.info("Parsed %d entries", len(entries))
 
     driver = build_driver(settings)
+    engine = build_engine(settings)
+    pg_factory = build_session_factory(engine)
     await init_constraints(driver)
 
-    logger.info("Ingesting into Neo4j …")
-    result = await ingest(entries, driver)
+    logger.info("Ingesting into Neo4j + PostgreSQL …")
+    result = await ingest(entries, driver, session_factory=pg_factory)
     await driver.close()
+    await engine.dispose()
 
     print("\n--- Ingestion complete ---")
     print(result.summary())

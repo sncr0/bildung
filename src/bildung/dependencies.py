@@ -40,24 +40,39 @@ def get_ol_client(request: Request) -> OpenLibraryClient:
 
 # --- Repositories ---
 
-def get_work_repo(request: Request) -> WorkRepository:
-    return WorkRepository(get_app_state(request).neo4j_driver)
+async def get_work_repo(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> WorkRepository:
+    return WorkRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
 
 
-def get_author_repo(request: Request) -> AuthorRepository:
-    return AuthorRepository(get_app_state(request).neo4j_driver)
+async def get_author_repo(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> AuthorRepository:
+    return AuthorRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
 
 
-def get_collection_repo(request: Request) -> CollectionRepository:
-    return CollectionRepository(get_app_state(request).neo4j_driver)
+async def get_collection_repo(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> CollectionRepository:
+    return CollectionRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
 
 
-def get_stream_repo(request: Request) -> StreamRepository:
-    return StreamRepository(get_app_state(request).neo4j_driver)
+async def get_stream_repo(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> StreamRepository:
+    return StreamRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
 
 
-def get_series_repo(request: Request) -> SeriesRepository:
-    return SeriesRepository(get_app_state(request).neo4j_driver)
+async def get_series_repo(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> SeriesRepository:
+    return SeriesRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
 
 
 # --- Services ---
@@ -67,26 +82,49 @@ async def get_work_service(
     pg_session: AsyncSession = Depends(get_pg_session),
 ) -> WorkService:
     return WorkService(
-        work_repo=get_work_repo(request),
+        work_repo=WorkRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request)),
         pg_session=pg_session,
     )
 
 
-def get_author_service(request: Request) -> AuthorService:
-    return AuthorService(author_repo=get_author_repo(request))
+async def get_author_service(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> AuthorService:
+    return AuthorService(
+        author_repo=AuthorRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
+    )
 
 
-def get_stream_service(request: Request) -> StreamService:
-    return StreamService(stream_repo=get_stream_repo(request))
+async def get_stream_service(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> StreamService:
+    return StreamService(
+        stream_repo=StreamRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
+    )
 
 
-def get_collection_service(request: Request) -> CollectionService:
-    return CollectionService(collection_repo=get_collection_repo(request))
+async def get_collection_service(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> CollectionService:
+    return CollectionService(
+        collection_repo=CollectionRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
+    )
 
 
-def get_series_service(request: Request) -> SeriesService:
-    return SeriesService(series_repo=get_series_repo(request))
+async def get_series_service(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> SeriesService:
+    return SeriesService(
+        series_repo=SeriesRepository(pg_session=pg_session, neo4j_driver=get_neo4j_driver(request))
+    )
 
 
-def get_stats_service(request: Request) -> StatsService:
-    return StatsService(driver=get_app_state(request).neo4j_driver)
+async def get_stats_service(
+    request: Request,
+    pg_session: AsyncSession = Depends(get_pg_session),
+) -> StatsService:
+    return StatsService(pg_session=pg_session)

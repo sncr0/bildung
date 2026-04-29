@@ -6,9 +6,13 @@ Run with:
 from __future__ import annotations
 
 import asyncio
+import uuid
+
+from sqlalchemy import text
 
 from bildung.config import load_settings
 from bildung.db.neo4j import build_driver
+from bildung.db.postgres import build_engine, build_session_factory
 from bildung.ids import author_id as _author_id
 from bildung.ids import collection_id as _coll_id
 from bildung.ids import stream_id as _stream_id
@@ -622,7 +626,10 @@ STREAM_COLLECTIONS: dict[str, list[str]] = {
 async def main() -> None:
     settings = load_settings()
     driver = build_driver(settings)
-    async with driver.session() as s:
+    engine = build_engine(settings)
+    pg_factory = build_session_factory(engine)
+
+    async with driver.session() as s, pg_factory() as pg:
 
         # 1. Significance markings
         print("Setting significance on works…")

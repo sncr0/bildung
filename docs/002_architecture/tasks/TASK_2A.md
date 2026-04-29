@@ -351,16 +351,18 @@ curl -s http://localhost:8000/works | python3 -c "import json,sys; d=json.load(s
 
 ## Handoff
 
-_Fill in after completing this task:_
-
 ### Decisions Made
-<!-- E.g., "Used autogenerate for migration — worked without manual edits" -->
+- Wrote migration manually (`002_entity_tables.py`). Autogenerate failed because port 5432 was occupied by another project's container at the time; the bildung postgres couldn't start. Migration written to match the spec's ORM models exactly.
+- Also fixed `alembic/env.py` which still imported `from bildung.config import settings` (removed in Task 0C) — changed to `load_settings()`.
 
 ### Harder Than Expected
-<!-- E.g., "Had to add imports for INTEGER, TEXT to postgres.py" -->
+- Docker port conflict: `finalysis-postgres-1` was holding port 5432, causing bildung postgres to start without a port binding (container ran but was unreachable from the host). Required `docker compose rm -f postgres && docker compose up -d postgres` to recreate with correct port binding.
 
 ### Watch Out (for Task 2B)
-<!-- E.g., "UUID columns expect uuid.UUID objects, not strings — migration script needs to convert" -->
+- Neo4j IDs are UUIDs stored as strings (e.g. `"a1b2c3..."`). PostgreSQL UUID columns expect `uuid.UUID` objects — migration script must call `uuid.UUID(neo4j_id_string)` when inserting.
+- `alembic_version` already had `001` applied before this migration — the `002` migration ran `001 -> 002` cleanly. No baseline needed.
+- The `collections.author_id` FK references `authors.id`. Insert authors before collections.
+- `work_series.series_id` FK references `series.id` — ensure `series` rows exist before inserting `work_series`.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+- None. All 10 tables and 5 indexes exist. Models importable. Migration runs cleanly.

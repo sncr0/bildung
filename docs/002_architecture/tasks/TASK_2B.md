@@ -349,13 +349,16 @@ curl -s http://localhost:8000/authors | python3 -c "import json,sys; d=json.load
 _Fill in after completing this task:_
 
 ### Decisions Made
-<!-- E.g., "Streams have created_at as ISO string — stored in PG as VARCHAR, not TIMESTAMP" -->
+- `order` is a reserved word in PostgreSQL. The `work_collections`, `collection_streams`, and `work_series` INSERT statements quote it as `"order"` to avoid a syntax error.
+- Relationship properties (`r.order`, `r.position`) are nullable in Neo4j — the script passes them through as `None` which PostgreSQL stores as NULL. Matches column definition (`nullable=True`).
 
 ### Harder Than Expected
-<!-- E.g., "Some Neo4j nodes had null IDs — had to skip them" -->
+- Nothing significant. Both databases were up and reachable. Migration ran first try.
 
 ### Watch Out (for Task 2C)
-<!-- E.g., "collection_streams table has X rows — verify repos return the right count" -->
+- Final counts: 64 authors, 124 works, 21 collections, 12 streams, 5 series; 125 work_authors, 83 work_collections, 21 collection_streams, 99 work_streams, 15 work_series.
+- `work_streams` has 99 rows (direct BELONGS_TO edges). `collection_streams` has 21 rows. Task 2C stream queries must JOIN these correctly or stream membership counts will be wrong.
+- `work_collections` `"order"` column must be quoted in any raw SQL that references it, since `order` is a reserved word.
 
 ### Deviations from Spec
-<!-- Did you deviate? Why? -->
+- None. All 5 entity functions and all 5 relationship migrations implemented. `ON CONFLICT DO NOTHING` used throughout. Script is idempotent (verified by re-running).

@@ -42,7 +42,10 @@ class WorkService:
         work = await self._works.get(work_id)
         if not work:
             return None
-        return self._work_to_response(work)
+        stream_ids = await self._works.get_stream_ids(work_id)
+        response = self._work_to_response(work)
+        response.stream_ids = stream_ids
+        return response
 
     async def create(self, req: CreateWorkRequest) -> WorkResponse:
         wid = _work_id(req.title, req.author)
